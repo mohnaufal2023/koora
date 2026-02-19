@@ -1,12 +1,15 @@
 import os
 import pandas as pd
+import joblib
 from sklearn.svm import SVC
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.ensemble import RandomForestClassifier, VotingClassifier
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
+from sklearn.metrics import confusion_matrix, classification_report
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FEATURE_DIR = os.path.join(BASE_DIR, "features")
+MODEL_PATH = os.path.join(BASE_DIR, "model.pkl")
 
 
 def load_dataset(filename):
@@ -28,6 +31,8 @@ def evaluate_model(model, X_test, y_test, model_name):
     print(f"Recall   : {recall_score(y_test, y_pred):.4f}")
     print(f"F1-Score : {f1_score(y_test, y_pred):.4f}")
 
+    return y_pred
+
 
 def main():
     # Load dataset
@@ -43,6 +48,11 @@ def main():
     svm.fit(X_train, y_train)
     knn.fit(X_train, y_train)
     rf.fit(X_train, y_train)
+
+    # ==============================
+    # SIMPAN MODEL TERBAIK (RF)
+    # ==============================
+    joblib.dump(rf, MODEL_PATH)
 
     # Evaluasi model individual
     evaluate_model(svm, X_test, y_test, "SVM")
@@ -62,7 +72,16 @@ def main():
     ensemble.fit(X_train, y_train)
 
     # Evaluasi ensemble
-    evaluate_model(ensemble, X_test, y_test, "Ensemble (Hard Voting)")
+    y_pred_ensemble = evaluate_model(ensemble, X_test, y_test, "Ensemble (Hard Voting)")
+
+    # Confusion Matrix
+    cm = confusion_matrix(y_test, y_pred_ensemble)
+    print("\n=== Confusion Matrix (Ensemble) ===")
+    print(cm)
+
+    # Classification Report
+    print("\n=== Classification Report (Ensemble) ===")
+    print(classification_report(y_test, y_pred_ensemble))
 
 
 if __name__ == "__main__":
