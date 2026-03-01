@@ -11,85 +11,63 @@ from src.feature_extraction import extract_features
 # ==========================
 model = joblib.load("model.pkl")
 
-st.set_page_config(page_title="Deteksi Gambar AI", layout="centered")
+st.set_page_config(page_title="Deteksi Gambar AI", layout="wide")
 
-st.title("🖼️ Deteksi Gambar AI vs Real")
-st.write("Upload gambar untuk mengetahui apakah gambar tersebut AI atau REAL.")
-
-# ==========================
-# Fungsi Histogram RGB
-# ==========================
-def plot_rgb_histogram(image):
-    colors = ('b', 'g', 'r')
-    fig, ax = plt.subplots()
-
-    for i, color in enumerate(colors):
-        hist = cv2.calcHist([image], [i], None, [256], [0, 256])
-        ax.plot(hist, color=color)
-        ax.set_xlim([0, 256])
-
-    ax.set_title("Histogram Warna RGB")
-    ax.set_xlabel("Intensitas Piksel")
-    ax.set_ylabel("Jumlah Piksel")
-
-    return fig
-
-
-# ==========================
-# Fungsi Histogram Grayscale
-# ==========================
-def plot_gray_histogram(gray):
-    fig, ax = plt.subplots()
-
-    hist = cv2.calcHist([gray], [0], None, [256], [0, 256])
-    ax.plot(hist, color='black')
-    ax.set_xlim([0, 256])
-
-    ax.set_title("Histogram Grayscale (Distribusi Intensitas Piksel)")
-    ax.set_xlabel("Intensitas Piksel")
-    ax.set_ylabel("Jumlah Piksel")
-
-    return fig
-
+st.title("🖼️ Sistem Deteksi Gambar AI vs Real")
+st.markdown("---")
 
 uploaded_file = st.file_uploader("Upload Gambar", type=["jpg", "jpeg", "png"])
 
 if uploaded_file is not None:
+
     file_bytes = np.asarray(bytearray(uploaded_file.read()), dtype=np.uint8)
     image = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
 
-    st.image(image, caption="Gambar Uploaded", use_container_width=True)
+    image_resized = cv2.resize(image, (256, 256))
+    gray = cv2.cvtColor(image_resized, cv2.COLOR_BGR2GRAY)
 
-    # ==============================
-    # Histogram RGB
-    # ==============================
-    st.subheader("📊 Histogram Warna RGB")
-    fig_rgb = plot_rgb_histogram(image)
-    st.pyplot(fig_rgb)
+    col1, col2 = st.columns(2)
 
-    # Resize sesuai training
-    image = cv2.resize(image, (256, 256))
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    # ======================
+    # KOLOM 1 (Gambar & Edge)
+    # ======================
+    with col1:
+        st.subheader("📷 Gambar")
+        st.image(image, use_container_width=True)
 
-    # ==============================
-    # Histogram Grayscale
-    # ==============================
-    st.subheader("📈 Distribusi Intensitas Piksel (Grayscale)")
-    fig_gray = plot_gray_histogram(gray)
-    st.pyplot(fig_gray)
+        st.subheader("🧩 Canny Edge")
+        edges = cv2.Canny(gray, 100, 200)
+        st.image(edges, use_container_width=True)
 
-    # ==============================
-    # Visualisasi Canny Edge
-    # ==============================
-    st.subheader("🧩 Visualisasi Deteksi Tepi (Canny)")
-    edges = cv2.Canny(gray, 100, 200)
-    st.image(edges, caption="Hasil Canny Edge Detection", use_container_width=True)
+    # ======================
+    # KOLOM 2 (Histogram)
+    # ======================
+    with col2:
+        st.subheader("📊 Histogram RGB")
 
-    edge_ratio = np.sum(edges > 0) / edges.size
+        fig_rgb, ax = plt.subplots()
+        colors = ('b', 'g', 'r')
 
-    # ==============================
-    # Hitung GLCM (Transparansi)
-    # ==============================
+        for i, color in enumerate(colors):
+            hist = cv2.calcHist([image_resized], [i], None, [256], [0, 256])
+            ax.plot(hist, color=color)
+
+        ax.set_xlim([0, 256])
+        st.pyplot(fig_rgb)
+
+        st.subheader("📈 Histogram Grayscale")
+
+        fig_gray, ax2 = plt.subplots()
+        hist_gray = cv2.calcHist([gray], [0], None, [256], [0, 256])
+        ax2.plot(hist_gray, color='black')
+        ax2.set_xlim([0, 256])
+        st.pyplot(fig_gray)
+
+    st.markdown("---")
+
+    # ======================
+    # Fitur Tekstur
+    # ======================
     glcm = graycomatrix(
         gray,
         distances=[1],
@@ -103,22 +81,26 @@ if uploaded_file is not None:
     correlation = graycoprops(glcm, 'correlation')[0][0]
     energy = graycoprops(glcm, 'energy')[0][0]
     homogeneity = graycoprops(glcm, 'homogeneity')[0][0]
+    edge_ratio = np.sum(edges > 0) / edges.size
 
-    # ==============================
-    # Tampilkan Nilai Fitur
-    # ==============================
-    st.subheader("🔎 Nilai Fitur yang Dihitung")
+    st.subheader("🔎 Nilai Fitur yang Digunakan")
 
-    st.write(f"Contrast     : {contrast:.4f}")
-    st.write(f"Correlation  : {correlation:.4f}")
-    st.write(f"Energy       : {energy:.4f}")
-    st.write(f"Homogeneity  : {homogeneity:.4f}")
-    st.write(f"Edge Ratio   : {edge_ratio:.4f}")
+    col3, col4, col5 = st.columns(3)
 
-    # ==============================
-    # Ekstraksi fitur untuk model
-    # ==============================
-    features = extract_features(image)
+    col3.metric("Contrast", f"{contrast:.2f}")
+    col3.metric("Correlation", f"{correlation:.3f}")
+
+    col4.metric("Energy", f"{energy:.4f}")
+    col4.metric("Homogeneity", f"{homogeneity:.3f}")
+
+    col5.metric("Edge Ratio", f"{edge_ratio:.3f}")
+
+    st.markdown("---")
+
+    # ======================
+    # Prediksi
+    # ======================
+    features = extract_features(image_resized)
     features = np.array(features).reshape(1, -1)
 
     prediction = model.predict(features)[0]
@@ -127,6 +109,14 @@ if uploaded_file is not None:
     label = "AI 🤖" if prediction == 1 else "REAL 📷"
     confidence = max(probabilities) * 100
 
-    st.subheader(f"🎯 Hasil Prediksi: {label}")
-    st.write(f"Confidence: {confidence:.2f}%")
+    st.subheader("🎯 Hasil Prediksi")
+    st.success(f"{label} (Confidence: {confidence:.2f}%)")
+
     st.progress(int(confidence))
+
+    # Probabilitas detail
+    st.subheader("📊 Probabilitas Kelas")
+    st.bar_chart({
+        "REAL": probabilities[0],
+        "AI": probabilities[1]
+    })
